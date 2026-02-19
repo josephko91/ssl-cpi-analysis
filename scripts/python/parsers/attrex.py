@@ -6,29 +6,50 @@ Data Source: https://espoarchive.nasa.gov/archive/browse/attrex/id4/GHawk
 Data Format: NASA ICARTT (.ict) files
 
 Water vapor instruments: NOAA-H2O, DLH (Diode Laser Hygrometer)
+Meteorological data: MMS (Meteorological Measurement System)
+
+Notes
+-----
+ATTREX data is split across multiple instruments in separate .ict files.
+Temperature and pressure come from the MMS instrument, while water vapor
+comes from DLH-H2O and/or NOAA-H2O. These must be merged across instruments
+(via merge_asof on datetime_utc) before Si can be computed.
+
+MMS raw values for temperature and pressure are scaled by 0.01
+(i.e., stored as integers; multiply by 0.01 to get Kelvin / hPa).
 """
 
 import pandas as pd
 import numpy as np
 from pathlib import Path
-from typing import Union, Dict
+from typing import Union, Dict, List, Optional
+from collections import defaultdict
 
 from .utils import si_from_ppmv
 
 
-# Time column names for different ATTREX instruments
+# ---------------------------------------------------------------------------
+# Instrument-specific time column names
+# ---------------------------------------------------------------------------
 ATTREX_TIME_COLS: Dict[str, str] = {
-    "DLH-H2O": "Time_Start",
-    "NOAA-H2O": "Time_Start",
-    "MMS": "Time_Start",
+    "DLH-H2O": "Time_UTC",
+    "NOAA-H2O": "NW_UTC_s",
+    "MMS": "TIME_UTC",
 }
 
-# Missing value flags
+# Fallback patterns (checked in order) when the canonical name is missing
+_TIME_FALLBACKS = ["Time_Start", "Time_Mid", "time"]
+
+# Missing value flags used across ATTREX .ict files
 ATTREX_MISSING_FLAGS = [-9999, -9999.99, -7777, -7777.77, -8888, -8888.88]
 
 
+# ---------------------------------------------------------------------------
+# Low-level helpers
+# ---------------------------------------------------------------------------
+
 def _replace_invalid_values(value: str) -> float:
-    """Replace invalid values during CSV parsing."""
+    """Replace invalid / missing-flag values during CSV parsing."""
     try:
         val = float(value)
         if val in ATTREX_MISSING_FLAGS:
@@ -38,33 +59,66 @@ def _replace_invalid_values(value: str) -> float:
         return np.nan
 
 
-def _parse_ict_file(filepath: Path, time_col: str = "Time_Start") -> pd.DataFrame:
+def _infer_instrument(filepath: Path) -> str:
     """
-    Parse NASA ICARTT format (.ict) file.
-    
+    Infer the instrument name from the parent directory or filename.
+
+    The ATTREX archive is typically organized as::
+
+        ATTREX/
+            DLH-H2O/
+                DLH-H2O_*.ict
+            NOAA-H2O/
+                NOAA-H2O_*.ict
+            MMS/ (or MMS-1HZ/)
+                MMS-1HZ_*.ict
+
+    Returns one of the keys in ATTREX_TIME_COLS, or the raw parent name.
+    """
+    parent = filepath.parent.name
+    stem = filepath.stem.upper()
+    for key in ATTREX_TIME_COLS:
+        if key.upper() in parent.upper() or key.upper().replace("-", "") in stem.replace("-", ""):
+            return key
+    # Check for MMS-1HZ variant
+    if "MMS" in parent.upper() or "MMS" in stem:
+        return "MMS"
+    return parent
+
+
+def _parse_ict_file(
+    filepath: Path,
+    time_col: str = "Time_Start",
+    prefix: Optional[str] = None,
+) -> pd.DataFrame:
+    """
+    Parse a NASA ICARTT format (.ict) file.
+
     Parameters
     ----------
     filepath : Path
         Path to the .ict file.
     time_col : str
-        Name of the time column to use.
-        
+        Preferred time column name for this instrument.
+    prefix : str, optional
+        If provided, non-time data columns are prefixed (e.g. ``"DLH-H2O_"``).
+
     Returns
     -------
     pd.DataFrame
-        Parsed data with datetime_utc column.
+        Parsed data with a ``datetime_utc`` column.
     """
-    with open(filepath, 'r') as f:
+    with open(filepath, "r") as f:
         first_line = f.readline().strip()
-        n_header_lines = int(first_line.split(',')[0])
-        
+        n_header_lines = int(first_line.split(",")[0])
+
         f.seek(0)
         header_lines = [f.readline().strip() for _ in range(n_header_lines)]
-    
-    # Find flight date from header (YYYY, MM, DD format)
+
+    # --- flight date from header (ICARTT: line 7 is "YYYY, MM, DD, …") ---
     flight_date = None
     for line in header_lines:
-        parts = [p.strip() for p in line.split(',')]
+        parts = [p.strip() for p in line.split(",")]
         if len(parts) >= 3:
             try:
                 year, month, day = int(parts[0]), int(parts[1]), int(parts[2])
@@ -73,153 +127,292 @@ def _parse_ict_file(filepath: Path, time_col: str = "Time_Start") -> pd.DataFram
                     break
             except ValueError:
                 continue
-    
+
     if flight_date is None:
         raise ValueError(f"Could not find flight date in header of {filepath.name}")
-    
-    # Extract column names from last header line
+
+    # --- column names from last header line ---
     col_line = header_lines[-1]
-    columns = [col.strip() for col in col_line.split(',') if col.strip()]
-    
-    # Read data
+    columns = [col.strip() for col in col_line.split(",") if col.strip()]
+
+    # --- read data ---
     df = pd.read_csv(
         filepath,
         skiprows=n_header_lines,
         names=columns,
         converters={col: _replace_invalid_values for col in columns},
         skipinitialspace=True,
-        on_bad_lines='skip',
+        on_bad_lines="skip",
     )
-    
     df.columns = df.columns.str.strip()
-    
-    # Create datetime_utc from time column
-    if time_col in df.columns:
-        df['datetime_utc'] = flight_date + pd.to_timedelta(df[time_col], unit='s')
-    else:
-        # Try to find any time-like column
-        time_candidates = [c for c in df.columns if 'time' in c.lower()]
-        if time_candidates:
-            df['datetime_utc'] = flight_date + pd.to_timedelta(df[time_candidates[0]], unit='s')
-    
-    # Handle missing data flags
+
+    # --- replace remaining missing-flag values ---
     for col in df.select_dtypes(include=[np.number]).columns:
         df[col] = df[col].replace(ATTREX_MISSING_FLAGS, np.nan)
-    
+
+    # --- create datetime_utc from the time column ---
+    used_time_col = None
+    if time_col in df.columns:
+        used_time_col = time_col
+    else:
+        # Try fallbacks
+        for fb in _TIME_FALLBACKS:
+            if fb in df.columns:
+                used_time_col = fb
+                break
+        if used_time_col is None:
+            # Try any column with 'time' or 'utc' in its name
+            time_candidates = [c for c in df.columns if "time" in c.lower() or "utc" in c.lower()]
+            if time_candidates:
+                used_time_col = time_candidates[0]
+
+    if used_time_col is not None:
+        df["datetime_utc"] = flight_date + pd.to_timedelta(df[used_time_col], unit="s")
+    else:
+        # Use the first column as seconds-of-day
+        df["datetime_utc"] = flight_date + pd.to_timedelta(df.iloc[:, 0], unit="s")
+
+    # --- optionally prefix data columns (not datetime_utc) ---
+    if prefix:
+        rename_map = {}
+        for c in df.columns:
+            if c == "datetime_utc":
+                continue
+            # Don't double-prefix
+            if not c.startswith(prefix):
+                rename_map[c] = f"{prefix}_{c}"
+        df.rename(columns=rename_map, inplace=True)
+
+    df["source_file"] = filepath.name
     return df
 
 
-def load_attrex_file(filepath: Union[str, Path]) -> pd.DataFrame:
+# ---------------------------------------------------------------------------
+# Cross-instrument merge
+# ---------------------------------------------------------------------------
+
+def _combine_ict_files(
+    files: List[Path],
+    time_tolerance: str = "1s",
+) -> pd.DataFrame:
     """
-    Load a single ATTREX ICT file.
-    
+    Parse all .ict files, group by instrument, and merge via ``merge_asof``.
+
     Parameters
     ----------
-    filepath : str or Path
-        Path to the .ict file.
-        
+    files : list of Path
+        All .ict files found under the ATTREX data directory.
+    time_tolerance : str
+        Tolerance for ``merge_asof`` (default ``'1s'``).
+
     Returns
     -------
     pd.DataFrame
-        Parsed data with computed Si.
+        Merged DataFrame with columns from all instruments and ``datetime_utc``.
     """
-    filepath = Path(filepath)
-    
-    # Determine instrument from parent directory or filename
-    instrument = filepath.parent.name
-    time_col = ATTREX_TIME_COLS.get(instrument, "Time_Start")
-    
-    df = _parse_ict_file(filepath, time_col)
-    
-    # Rename datetime column
-    if 'datetime_utc' in df.columns:
-        df['Timestamp'] = pd.to_datetime(df['datetime_utc'], utc=True)
-    
-    # Calculate Si for DLH-H2O
-    h2o_col = next((c for c in df.columns if 'H2O' in c and 'ppm' in c.lower()), None)
-    temp_col = next((c for c in df.columns if c == 'T' or c.startswith('T_')), None)
-    pres_col = next((c for c in df.columns if c == 'P' or c.startswith('P_')), None)
-    
-    if h2o_col and temp_col and pres_col:
-        df["Si"] = si_from_ppmv(df[h2o_col], df[temp_col], df[pres_col])
-    
-    # Temperature in Celsius
-    if temp_col and df[temp_col].median() > 200:  # Likely in Kelvin
-        df["T_C"] = df[temp_col] - 273.15
-    elif temp_col:
-        df["T_C"] = df[temp_col]
-    
-    df["source_file"] = filepath.name
-    
-    return df
+    # Group files by instrument
+    instrument_files: Dict[str, List[Path]] = defaultdict(list)
+    for f in files:
+        inst = _infer_instrument(f)
+        instrument_files[inst].append(f)
 
+    # Parse and concatenate within each instrument
+    instrument_dfs: Dict[str, pd.DataFrame] = {}
+    for inst, inst_files in instrument_files.items():
+        time_col = ATTREX_TIME_COLS.get(inst, "Time_Start")
+        prefix = inst
+        parsed = []
+        for fp in sorted(inst_files):
+            try:
+                parsed.append(_parse_ict_file(fp, time_col=time_col, prefix=prefix))
+            except Exception as e:
+                print(f"  Warning: Could not parse {fp.name} ({inst}): {e}")
+        if parsed:
+            combined = pd.concat(parsed, ignore_index=True)
+            combined.sort_values("datetime_utc", inplace=True)
+            combined.reset_index(drop=True, inplace=True)
+            instrument_dfs[inst] = combined
+
+    if not instrument_dfs:
+        raise ValueError("No ATTREX instrument files could be parsed.")
+
+    # Merge across instruments using merge_asof on datetime_utc
+    instruments = list(instrument_dfs.keys())
+    merged = instrument_dfs[instruments[0]].copy()
+
+    for inst in instruments[1:]:
+        right = instrument_dfs[inst]
+        # Drop duplicate non-key columns before merging
+        overlap = set(merged.columns) & set(right.columns) - {"datetime_utc"}
+        right_clean = right.drop(columns=[c for c in overlap if c != "source_file"], errors="ignore")
+        if "source_file" in right_clean.columns and "source_file" in merged.columns:
+            right_clean = right_clean.rename(columns={"source_file": f"source_file_{inst}"})
+        merged = pd.merge_asof(
+            merged.sort_values("datetime_utc"),
+            right_clean.sort_values("datetime_utc"),
+            on="datetime_utc",
+            tolerance=pd.Timedelta(time_tolerance),
+            direction="nearest",
+        )
+
+    return merged
+
+
+# ---------------------------------------------------------------------------
+# Public API
+# ---------------------------------------------------------------------------
 
 def load_attrex(
     data_dir: Union[str, Path],
-    pattern: str = "*.ict"
+    pattern: str = "*.ict",
 ) -> pd.DataFrame:
     """
-    Load all ATTREX ICT files from a directory.
-    
+    Load all ATTREX ICT files, merge across instruments, and compute Si.
+
+    The function:
+    1. Recursively finds all ``.ict`` files under *data_dir*.
+    2. Groups them by instrument (DLH-H2O, NOAA-H2O, MMS, …).
+    3. Merges across instruments via ``merge_asof`` on ``datetime_utc``.
+    4. Applies MMS scaling (× 0.01 for temperature and pressure).
+    5. Computes Si from water-vapor mixing ratio, temperature, and pressure.
+
     Parameters
     ----------
     data_dir : str or Path
-        Directory containing ATTREX .ict files.
+        Root directory containing ATTREX instrument sub-folders.
     pattern : str, optional
-        Glob pattern for matching files (default: "*.ict").
-        
+        Glob pattern for matching files (default: ``"*.ict"``).
+
     Returns
     -------
     pd.DataFrame
-        Combined data from all files.
+        Combined data from all instruments with ``Si``, ``T_C``, ``Timestamp``.
     """
     data_dir = Path(data_dir)
-    
-    # Search recursively for .ict files
     files = list(data_dir.rglob(pattern))
-    
+
     if not files:
         raise FileNotFoundError(f"No files matching '{pattern}' found in {data_dir}")
-    
-    dfs = []
-    for f in sorted(files):
-        try:
-            dfs.append(load_attrex_file(f))
-        except Exception as e:
-            print(f"Warning: Could not load {f.name}: {e}")
-    
-    combined = pd.concat(dfs, ignore_index=True)
-    combined["Campaign"] = "ATTREX"
-    
-    return combined
+
+    print(f"  Found {len(files)} .ict files in {data_dir}")
+
+    # --- merge across instruments ---
+    df = _combine_ict_files(files, time_tolerance="1s")
+
+    # --- apply MMS scaling (raw integers → physical units) ---
+    # Temperature: look for MMS_T or MMS-1HZ_T
+    mms_t_col = next((c for c in df.columns if "MMS" in c.upper() and "_T" in c), None)
+    # Pressure: look for MMS_P or MMS-1HZ_P
+    mms_p_col = next((c for c in df.columns if "MMS" in c.upper() and "_P" in c), None)
+
+    if mms_t_col is not None:
+        raw_t = df[mms_t_col]
+        # If median > 1000, values are likely scaled integers (× 0.01 → Kelvin)
+        if raw_t.median() > 1000:
+            df["T"] = raw_t * 0.01
+        elif raw_t.median() > 200:
+            df["T"] = raw_t          # already in Kelvin
+        else:
+            df["T"] = raw_t + 273.15  # assume Celsius
+    else:
+        # Fallback: look for any column named T or starting with T_
+        t_fallback = next((c for c in df.columns if c == "T" or c.startswith("T_")), None)
+        if t_fallback:
+            if df[t_fallback].median() > 200:
+                df["T"] = df[t_fallback]
+            else:
+                df["T"] = df[t_fallback] + 273.15
+
+    if mms_p_col is not None:
+        raw_p = df[mms_p_col]
+        # If median > 10000, values are likely scaled integers (× 0.01 → hPa)
+        if raw_p.median() > 10000:
+            df["P"] = raw_p * 0.01
+        else:
+            df["P"] = raw_p
+    else:
+        p_fallback = next((c for c in df.columns if c == "P" or c.startswith("P_")), None)
+        if p_fallback:
+            df["P"] = df[p_fallback]
+
+    # --- find water vapor column(s) ---
+    # Prefer DLH, fall back to NOAA
+    h2o_cols = [c for c in df.columns if "h2o" in c.lower() and "ppm" in c.lower()]
+    dlh_h2o = next((c for c in h2o_cols if "dlh" in c.lower()), None)
+    noaa_h2o = next((c for c in h2o_cols if "noaa" in c.lower() or "nw" in c.lower()), None)
+    h2o_col = dlh_h2o or noaa_h2o or (h2o_cols[0] if h2o_cols else None)
+
+    # --- compute Si ---
+    if h2o_col and "T" in df.columns and "P" in df.columns:
+        df["Si"] = si_from_ppmv(df[h2o_col], df["T"], df["P"])
+        print(f"  Computed Si using H2O={h2o_col}, T from {'MMS' if mms_t_col else 'fallback'}, "
+              f"P from {'MMS' if mms_p_col else 'fallback'}")
+
+        # Also compute Si from the second H2O source if available
+        h2o_alt = noaa_h2o if h2o_col == dlh_h2o else dlh_h2o
+        if h2o_alt:
+            df["Si_alt"] = si_from_ppmv(df[h2o_alt], df["T"], df["P"])
+            print(f"  Also computed Si_alt using H2O={h2o_alt}")
+    else:
+        missing = []
+        if not h2o_col:
+            missing.append("H2O (ppmv)")
+        if "T" not in df.columns:
+            missing.append("Temperature")
+        if "P" not in df.columns:
+            missing.append("Pressure")
+        print(f"  WARNING: Cannot compute Si — missing columns: {', '.join(missing)}")
+        print(f"  Available columns: {df.columns.tolist()}")
+        df["Si"] = np.nan
+
+    # --- temperature in Celsius ---
+    if "T" in df.columns:
+        df["T_C"] = df["T"] - 273.15
+
+    # --- timestamp ---
+    if "datetime_utc" in df.columns:
+        df["Timestamp"] = pd.to_datetime(df["datetime_utc"], utc=True)
+
+    df["Campaign"] = "ATTREX"
+
+    return df
 
 
 def extract_attrex_standard(df: pd.DataFrame) -> pd.DataFrame:
     """
     Extract standardized columns from ATTREX data.
-    
+
     Parameters
     ----------
     df : pd.DataFrame
-        Raw data loaded by load_attrex.
-        
+        Data loaded by :func:`load_attrex`.
+
     Returns
     -------
     pd.DataFrame
         Standardized data with Timestamp, Tair_C, Si, Lat, Lon, Alt_m, Campaign.
     """
-    # Find position columns
-    lat_col = next((c for c in df.columns if 'lat' in c.lower()), None)
-    lon_col = next((c for c in df.columns if 'lon' in c.lower()), None)
-    alt_col = next((c for c in df.columns if 'alt' in c.lower()), None)
-    
+    # Find position columns (may be prefixed with instrument name)
+    lat_col = next((c for c in df.columns if "lat" in c.lower()), None)
+    lon_col = next((c for c in df.columns if "lon" in c.lower()), None)
+    alt_col = next((c for c in df.columns if "alt" in c.lower()), None)
+
+    # Consolidate source_file columns
+    src_cols = [c for c in df.columns if c.startswith("source_file")]
+    if src_cols:
+        source = df[src_cols[0]].astype(str)
+        for sc in src_cols[1:]:
+            source = source + "+" + df[sc].astype(str)
+    else:
+        source = ""
+
     return pd.DataFrame({
         "Timestamp": df.get("Timestamp", pd.NaT),
         "Tair_C": df.get("T_C", np.nan),
         "Si": df.get("Si", np.nan),
-        "Lat": df.get(lat_col, np.nan) if lat_col else np.nan,
-        "Lon": df.get(lon_col, np.nan) if lon_col else np.nan,
-        "Alt_m": df.get(alt_col, np.nan) if alt_col else np.nan,
+        "Lat": df[lat_col] if lat_col else np.nan,
+        "Lon": df[lon_col] if lon_col else np.nan,
+        "Alt_m": df[alt_col] if alt_col else np.nan,
         "Campaign": df.get("Campaign", "ATTREX"),
-        "source_file": df["source_file"],
+        "source_file": source,
     })
