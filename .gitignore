@@ -1,6 +1,7 @@
 # Added by JK
 data/
 figs/
+*.parquet
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
