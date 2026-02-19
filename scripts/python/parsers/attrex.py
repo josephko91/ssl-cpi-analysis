@@ -335,6 +335,25 @@ def load_attrex(
         if p_fallback:
             df["P"] = df[p_fallback]
 
+    # --- sanitize T and P: set physically impossible values to NaN ---
+    # ATTREX flies near the tropical tropopause (~15-19 km altitude).
+    # Physically reasonable ranges:
+    #   Temperature: 150–350 K  (tropopause can be ~190 K)
+    #   Pressure:    10–1100 hPa (tropopause ~70-100 hPa)
+    if "T" in df.columns:
+        invalid_t = (df["T"] < 150) | (df["T"] > 350) | df["T"].isna()
+        n_bad_t = invalid_t.sum()
+        if n_bad_t > 0:
+            print(f"  Masking {n_bad_t:,} invalid T values (outside 150–350 K)")
+            df.loc[invalid_t, "T"] = np.nan
+
+    if "P" in df.columns:
+        invalid_p = (df["P"] <= 0) | (df["P"] > 1100) | df["P"].isna()
+        n_bad_p = invalid_p.sum()
+        if n_bad_p > 0:
+            print(f"  Masking {n_bad_p:,} invalid P values (outside 0–1100 hPa)")
+            df.loc[invalid_p, "P"] = np.nan
+
     # --- find water vapor column(s) ---
     # Prefer DLH, fall back to NOAA
     h2o_cols = [c for c in df.columns if "h2o" in c.lower() and "ppm" in c.lower()]
@@ -342,17 +361,40 @@ def load_attrex(
     noaa_h2o = next((c for c in h2o_cols if "noaa" in c.lower() or "nw" in c.lower()), None)
     h2o_col = dlh_h2o or noaa_h2o or (h2o_cols[0] if h2o_cols else None)
 
-    # --- compute Si ---
+    # Sanitize H2O: water vapor mixing ratio must be > 0
+    for wv_col in [dlh_h2o, noaa_h2o]:
+        if wv_col and wv_col in df.columns:
+            invalid_wv = (df[wv_col] <= 0) | df[wv_col].isna()
+            n_bad_wv = invalid_wv.sum()
+            if n_bad_wv > 0:
+                print(f"  Masking {n_bad_wv:,} invalid {wv_col} values (≤ 0 or NaN)")
+                df.loc[invalid_wv, wv_col] = np.nan
+
+    # --- compute Si (only where T, P, and H2O are all valid) ---
     if h2o_col and "T" in df.columns and "P" in df.columns:
-        df["Si"] = si_from_ppmv(df[h2o_col], df["T"], df["P"])
+        # Build a validity mask: all three inputs must be finite and positive
+        valid = df[h2o_col].notna() & df["T"].notna() & df["P"].notna()
+        n_valid = valid.sum()
+        print(f"  {n_valid:,} rows with valid T, P, and {h2o_col} for Si calculation")
+
+        df["Si"] = np.nan
+        if n_valid > 0:
+            df.loc[valid, "Si"] = si_from_ppmv(
+                df.loc[valid, h2o_col], df.loc[valid, "T"], df.loc[valid, "P"]
+            )
         print(f"  Computed Si using H2O={h2o_col}, T from {'MMS' if mms_t_col else 'fallback'}, "
               f"P from {'MMS' if mms_p_col else 'fallback'}")
 
         # Also compute Si from the second H2O source if available
         h2o_alt = noaa_h2o if h2o_col == dlh_h2o else dlh_h2o
-        if h2o_alt:
-            df["Si_alt"] = si_from_ppmv(df[h2o_alt], df["T"], df["P"])
-            print(f"  Also computed Si_alt using H2O={h2o_alt}")
+        if h2o_alt and h2o_alt in df.columns:
+            valid_alt = df[h2o_alt].notna() & df["T"].notna() & df["P"].notna()
+            df["Si_alt"] = np.nan
+            if valid_alt.sum() > 0:
+                df.loc[valid_alt, "Si_alt"] = si_from_ppmv(
+                    df.loc[valid_alt, h2o_alt], df.loc[valid_alt, "T"], df.loc[valid_alt, "P"]
+                )
+            print(f"  Also computed Si_alt using H2O={h2o_alt} ({valid_alt.sum():,} valid rows)")
     else:
         missing = []
         if not h2o_col:
@@ -364,6 +406,18 @@ def load_attrex(
         print(f"  WARNING: Cannot compute Si — missing columns: {', '.join(missing)}")
         print(f"  Available columns: {df.columns.tolist()}")
         df["Si"] = np.nan
+
+    # --- final Si sanity check: values outside [-1, 10] are suspect ---
+    if "Si" in df.columns:
+        extreme = (df["Si"].abs() > 10) & df["Si"].notna()
+        n_extreme = extreme.sum()
+        if n_extreme > 0:
+            print(f"  Masking {n_extreme:,} extreme Si values (|Si| > 10)")
+            df.loc[extreme, "Si"] = np.nan
+    if "Si_alt" in df.columns:
+        extreme_alt = (df["Si_alt"].abs() > 10) & df["Si_alt"].notna()
+        if extreme_alt.sum() > 0:
+            df.loc[extreme_alt, "Si_alt"] = np.nan
 
     # --- temperature in Celsius ---
     if "T" in df.columns:

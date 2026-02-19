@@ -71,17 +71,30 @@ def si_from_ppmv(wv_ppmv: np.ndarray, temp_K: np.ndarray, pressure_hPa: np.ndarr
     np.ndarray
         Ice supersaturation (Si).
     """
-    wv_ppmv = np.asarray(wv_ppmv)
-    temp_K = np.asarray(temp_K)
-    pressure_hPa = np.asarray(pressure_hPa)
-    
+    wv_ppmv = np.asarray(wv_ppmv, dtype=float)
+    temp_K = np.asarray(temp_K, dtype=float)
+    pressure_hPa = np.asarray(pressure_hPa, dtype=float)
+
+    # Mask physically invalid inputs so they don't produce extreme Si
+    invalid = (
+        ~np.isfinite(wv_ppmv) | (wv_ppmv <= 0)
+        | ~np.isfinite(temp_K) | (temp_K < 150) | (temp_K > 350)
+        | ~np.isfinite(pressure_hPa) | (pressure_hPa <= 0)
+    )
+
     # Calculate saturation vapor pressure over ice in hPa
     e_s = 6.112 * np.exp((22.46 * (temp_K - 273.15)) / (temp_K - 0.55))
-    
+
     # Convert vapor mixing ratio (ppmv) to actual vapor pressure (e) in hPa
     e = (wv_ppmv / 1e6) * pressure_hPa
-    
-    return (e / e_s) - 1.0
+
+    result = (e / e_s) - 1.0
+
+    # Replace invalid entries with NaN
+    if np.ndim(result) == 0:
+        return np.nan if invalid else float(result)
+    result[invalid] = np.nan
+    return result
 
 
 def si_from_rh(rh_percent: np.ndarray) -> np.ndarray:
