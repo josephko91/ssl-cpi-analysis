@@ -1,0 +1,75 @@
+# Campaign Data Processing Configuration
+# ======================================
+# This file configures the campaign data parsers.
+# Update paths to match your data directory structure.
+
+# Campaign configurations
+campaigns:
+  ARM:
+    path: /home/jko/ssl-cpi-analysis/data/env/ARM
+    pattern: "*.t4archive.gz"
+    description: >
+      ARM SGP 2000 Spring Cloud Campaign.
+      Binary .t4archive.gz files from Citation aircraft.
+    
+  CRYSTAL-FACE-NASA:
+    path: /home/jko/ssl-cpi-analysis/data/env/CRYSTAL-FACE-NASA
+    pattern: "*"
+    description: >
+      CRYSTAL-FACE NASA WB-57 aircraft.
+      JPL Laser Hygrometer (JLH) data files.
+      
+  CRYSTAL-FACE-UND:
+    path: /home/jko/ssl-cpi-analysis/data/env/CRYSTAL-FACE-UND
+    pattern: "*MIS.CIT"
+    description: >
+      CRYSTAL-FACE UND Citation aircraft.
+      MIS.CIT humidity files with corresponding MET.CIT meteorology.
+      
+  MC3E:
+    path: /home/jko/ssl-cpi-analysis/data/env/MC3E
+    pattern: "*"
+    description: >
+      MC3E (Midlatitude Continental Convective Clouds Experiment).
+      NASA ICARTT-style text files.
+      
+  MIDCIX:
+    path: /home/jko/ssl-cpi-analysis/data/env/MidCix
+    pattern: "*"
+    description: >
+      MidCiX (Midlatitude Cirrus Experiment) WB-57.
+      JLH (JPL Laser Hygrometer) text files.
+      
+  OLYMPEX:
+    path: /home/jko/ssl-cpi-analysis/data/env/OLYMPEX
+    pattern: "*"
+    description: >
+      OLYMPEX (Olympic Mountains Experiment) Citation.
+      Note: Water vapor measurements may have instrument issues.
+      
+  AIRS-II:
+    path: /home/jko/ssl-cpi-analysis/data/env/AIRS-II
+    pattern: "*.nc"
+    description: >
+      AIRS-II (Alliance Icing Research Study II).
+      NetCDF files with LRT flight-level data.
+      
+  ATTREX:
+    path: /home/jko/ssl-cpi-analysis/data/env/ATTREX
+    pattern: "*.ict"
+    description: >
+      ATTREX (Airborne Tropical TRopopause EXperiment).
+      NASA ICARTT (.ict) files from Global Hawk.
+
+# Output settings
+output:
+  default_format: parquet
+  standardized_columns:
+    - Timestamp      # UTC datetime
+    - Tair_C         # Air temperature (Celsius)
+    - Si             # Ice supersaturation (unitless, >0 = supersaturated)
+    - Lat            # Latitude (degrees)
+    - Lon            # Longitude (degrees)  
+    - Alt_m          # Altitude (meters)
+    - Campaign       # Campaign name
+    - source_file    # Original source file
