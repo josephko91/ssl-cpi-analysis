@@ -300,20 +300,28 @@ def load_attrex(
     df = _combine_ict_files(files, time_tolerance="1s")
 
     # --- apply MMS scaling (raw integers → physical units) ---
-    # Temperature: look for MMS_T or MMS-1HZ_T
-    mms_t_col = next((c for c in df.columns if "MMS" in c.upper() and "_T" in c), None)
-    # Pressure: look for MMS_P or MMS-1HZ_P
-    mms_p_col = next((c for c in df.columns if "MMS" in c.upper() and "_P" in c), None)
+    # Per ATTREX ICARTT documentation, MMS-1HZ stores T and P as scaled integers:
+    #   T_raw  [integer units of 0.01 K]  →  T_K  = T_raw * 0.01
+    #   P_raw  [integer units of 0.01 hPa] →  P_hPa = P_raw * 0.01
+    # At tropopause altitude (~70–100 hPa), raw P values are ~7000–10000, so a
+    # median-based threshold of > 10000 would FAIL to detect the scaling need.
+    # We therefore always apply × 0.01 when an MMS column is found.
+
+    # Temperature: look for a prefixed MMS column containing "_T" as a word boundary
+    mms_t_col = next(
+        (c for c in df.columns if "MMS" in c.upper() and c.upper().endswith("_T")),
+        None,
+    )
+    # Pressure: same logic for "_P"
+    mms_p_col = next(
+        (c for c in df.columns if "MMS" in c.upper() and c.upper().endswith("_P")),
+        None,
+    )
 
     if mms_t_col is not None:
-        raw_t = df[mms_t_col]
-        # If median > 1000, values are likely scaled integers (× 0.01 → Kelvin)
-        if raw_t.median() > 1000:
-            df["T"] = raw_t * 0.01
-        elif raw_t.median() > 200:
-            df["T"] = raw_t          # already in Kelvin
-        else:
-            df["T"] = raw_t + 273.15  # assume Celsius
+        # Always apply × 0.01 (documented MMS-1HZ scaling; raw ~22000–27000 → 220–270 K)
+        df["T"] = df[mms_t_col] * 0.01
+        print(f"  Scaled T: {mms_t_col} × 0.01  (sample median raw = {df[mms_t_col].median():.0f})")
     else:
         # Fallback: look for any column named T or starting with T_
         t_fallback = next((c for c in df.columns if c == "T" or c.startswith("T_")), None)
@@ -324,12 +332,9 @@ def load_attrex(
                 df["T"] = df[t_fallback] + 273.15
 
     if mms_p_col is not None:
-        raw_p = df[mms_p_col]
-        # If median > 10000, values are likely scaled integers (× 0.01 → hPa)
-        if raw_p.median() > 10000:
-            df["P"] = raw_p * 0.01
-        else:
-            df["P"] = raw_p
+        # Always apply × 0.01 (documented MMS-1HZ scaling; raw ~5000–10000 → 50–100 hPa)
+        df["P"] = df[mms_p_col] * 0.01
+        print(f"  Scaled P: {mms_p_col} × 0.01  (sample median raw = {df[mms_p_col].median():.0f})")
     else:
         p_fallback = next((c for c in df.columns if c == "P" or c.startswith("P_")), None)
         if p_fallback:
