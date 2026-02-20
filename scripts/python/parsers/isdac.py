@@ -215,9 +215,11 @@ def load_isdac_file(filepath: Union[str, Path]) -> pd.DataFrame:
 
     # Frost point (if present): expect [-120, 40] °C
     if "LicFro" in df.columns:
-        med_fp = np.nanmedian(df["LicFro"].to_numpy(dtype=float))
-        if np.isfinite(med_fp) and med_fp > 150:
-            df["LicFro"] = df["LicFro"] - 273.15
+        fp_vals = df["LicFro"].to_numpy(dtype=float)
+        if np.any(np.isfinite(fp_vals)):
+            med_fp = np.nanmedian(fp_vals)
+            if np.isfinite(med_fp) and med_fp > 150:
+                df["LicFro"] = df["LicFro"] - 273.15
         df.loc[(df["LicFro"] < -120) | (df["LicFro"] > 40), "LicFro"] = np.nan
 
     # Altitude: PreAlt in m
@@ -248,8 +250,13 @@ def load_isdac_file(filepath: Union[str, Path]) -> pd.DataFrame:
         mm = pd.to_numeric(df["MM"], errors="coerce").fillna(0).astype(int)
         ss = pd.to_numeric(df["SS"], errors="coerce").fillna(0).astype(int)
         total_seconds = hh * 3600 + mm * 60 + ss
-        base = pd.Timestamp(flight_date)
-        df["Timestamp"] = (base + pd.to_timedelta(total_seconds, unit="s")).dt.tz_localize("UTC")
+        # flight_date already carries tzinfo=UTC, so pd.Timestamp is tz-aware;
+        # use tz_localize only if the result is naive, otherwise it is already UTC.
+        base = pd.Timestamp(flight_date)  # tz-aware UTC
+        timestamps = base + pd.to_timedelta(total_seconds, unit="s")
+        if timestamps.dt.tz is None:
+            timestamps = timestamps.dt.tz_localize("UTC")
+        df["Timestamp"] = timestamps
     else:
         df["Timestamp"] = pd.NaT
 
