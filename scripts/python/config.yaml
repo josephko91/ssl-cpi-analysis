@@ -70,6 +70,16 @@ campaigns:
       Si is computed as supersaturation with respect to ice from FrostPoint vs Air_Temp,
       with invalid value masking and physical-limit filters.
 
+  ISDAC:
+    path: /home/jko/ssl-cpi-analysis/data/env/ISDAC/strapp-convair_bulk/CommaDelimited
+    pattern: "*.txt"
+    description: >
+      ISDAC (Indirect and Semi-Direct Aerosol Campaign) 2008 Convair 580.
+      Comma-delimited STRAPP bulk microphysics files.
+      Si is derived from ReHuI (RH w.r.t. ice) as Si = ReHuI/100 - 1.
+      Temperature from RSTem (°C), pressure from NPres (mb).
+      Fill values are large-magnitude -8x/-9x sentinel numbers.
+
   ESCAPE:
     path: /home/jko/ssl-cpi-analysis/data/env/ESCAPE/learjet-state-measurements/jk4731582465
     pattern: "ESCAPE-Page0_Learjet_*.ict"
