@@ -80,12 +80,33 @@ campaigns:
       Temperature from RSTem (°C), pressure from NPres (mb).
       Fill values are large-magnitude -8x/-9x sentinel numbers.
 
+  POSIDON:
+    path: /home/jko/ssl-cpi-analysis/data/env/POSIDON
+    pattern: "*.ict"
+    description: >
+      POSIDON 2016 NASA WB-57, western Pacific stratosphere.
+      NASA ICARTT (.ict) files organised in instrument subdirectories
+      (DLH-H2O/, MMS/, NOAA-H2O/). Si is derived from DLH water vapour
+      (DLH-H2O_H2O_ppmv) and MMS meteorology (MMS-1HZ_T × 0.01 → K,
+      MMS-1HZ_P × 0.01 → hPa) using the Tetens ice formula.
+      Si is clipped to [-1, 1].
+
   ESCAPE:
     path: /home/jko/ssl-cpi-analysis/data/env/ESCAPE/learjet-state-measurements/jk4731582465
     pattern: "ESCAPE-Page0_Learjet_*.ict"
     description: >
       ESCAPE Learjet state measurements (NASA ICARTT-like .ict files).
       Si is computed from dew point and ambient temperature with respect to ice.
+
+  MACPEX:
+    path: /home/jko/ssl-cpi-analysis/data/env/MACPEX
+    pattern: "*.ict"
+    description: >
+      MACPEX (Mid-latitude Airborne Cirrus Properties Experiment) 2011 WB-57.
+      NASA ICARTT (.ict) files organised in instrument subdirectories
+      (DLH-H2O/, HWV/, JLH/, MMS-MetData/, etc.). Si is derived from DLH
+      water vapour (DLH-H2O_H2O_ppmv) and MMS meteorology (T × 0.01 → K,
+      P × 0.1 → hPa) using the Tetens ice formula. Si is clipped to [-1, 1].
 
   ICE-L:
     path: /home/jko/ssl-cpi-analysis/data/env/ICE-L

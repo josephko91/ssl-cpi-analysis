@@ -27,6 +27,8 @@ from .escape import load_escape
 from .ice_l import load_ice_l
 from .iphex import load_iphex
 from .isdac import load_isdac
+from .macpex import load_macpex, extract_macpex_standard
+from .posidon import load_posidon
 
 # Campaign registry for easy iteration
 CAMPAIGN_LOADERS = {
@@ -40,6 +42,8 @@ CAMPAIGN_LOADERS = {
     "ATTREX": load_attrex,
     "IPHEX": load_iphex,
     "ISDAC": load_isdac,
+    "MACPEX": load_macpex,
+    "POSIDON": load_posidon,
     "ESCAPE": load_escape,
     "ICE-L": load_ice_l,
 }
@@ -64,6 +68,9 @@ __all__ = [
     "load_attrex",
     "load_iphex",
     "load_isdac",
+    "load_macpex",
+    "extract_macpex_standard",
+    "load_posidon",
     "load_escape",
     "load_ice_l",
     "CAMPAIGN_LOADERS",

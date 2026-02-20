@@ -33,8 +33,10 @@ from parsers.airs_ii import extract_airs_ii_standard
 from parsers.attrex import extract_attrex_standard
 from parsers.iphex import extract_iphex_standard
 from parsers.isdac import extract_isdac_standard
+from parsers.posidon import extract_posidon_standard
 from parsers.escape import extract_escape_standard
 from parsers.ice_l import extract_ice_l_standard
+from parsers.macpex import extract_macpex_standard
 
 
 # =============================================================================
@@ -103,6 +105,12 @@ DEFAULT_CAMPAIGN_CONFIG: Dict[str, Dict] = {
         "loader": "load_isdac",
         "extractor": extract_isdac_standard,
     },
+    "POSIDON": {
+        "path": "/home/jko/ssl-cpi-analysis/data/env/POSIDON",
+        "pattern": "*.ict",
+        "loader": "load_posidon",
+        "extractor": extract_posidon_standard,
+    },
     "ESCAPE": {
         "path": "/home/jko/ssl-cpi-analysis/data/env/ESCAPE/learjet-state-measurements/jk4731582465",
         "pattern": "ESCAPE-Page0_Learjet_*.ict",
@@ -114,6 +122,12 @@ DEFAULT_CAMPAIGN_CONFIG: Dict[str, Dict] = {
         "pattern": "*.PNI.nc",
         "loader": "load_ice_l",
         "extractor": extract_ice_l_standard,
+    },
+    "MACPEX": {
+        "path": "/home/jko/ssl-cpi-analysis/data/env/MACPEX",
+        "pattern": "*.ict",
+        "loader": "load_macpex",
+        "extractor": extract_macpex_standard,
     },
 }
 
