@@ -95,7 +95,7 @@ def _extract_date_from_filename(filepath: Path) -> Optional[datetime]:
     if len(parts) >= 3:
         try:
             return datetime(
-                int(parts[0]), int(parts[1]), int(parts[2]), tzinfo=timezone.utc
+                int(parts[0]), int(parts[1]), int(parts[2])
             )
         except (ValueError, IndexError):
             pass
@@ -250,7 +250,7 @@ def load_iphex_file(filepath: Union[str, Path]) -> pd.DataFrame:
 
 def load_iphex(data_dir: Union[str, Path], pattern: str = "*.iphex") -> pd.DataFrame:
     data_dir = Path(data_dir)
-    files = [f for f in data_dir.glob(pattern) if f.is_file()]
+    files = [f for f in data_dir.glob(pattern) if f.is_file() and "Combined" not in f.name]
 
     if not files:
         raise FileNotFoundError(f"No files matching '{pattern}' found in {data_dir}")
