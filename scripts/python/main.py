@@ -32,6 +32,7 @@ from parsers.olympex import extract_olympex_standard
 from parsers.airs_ii import extract_airs_ii_standard
 from parsers.attrex import extract_attrex_standard
 from parsers.escape import extract_escape_standard
+from parsers.ice_l import extract_ice_l_standard
 
 
 # =============================================================================
@@ -93,6 +94,12 @@ DEFAULT_CAMPAIGN_CONFIG: Dict[str, Dict] = {
         "pattern": "ESCAPE-Page0_Learjet_*.ict",
         "loader": "load_escape",
         "extractor": extract_escape_standard,
+    },
+    "ICE-L": {
+        "path": "/home/jko/ssl-cpi-analysis/data/env/ICE-L",
+        "pattern": "*.PNI.nc",
+        "loader": "load_ice_l",
+        "extractor": extract_ice_l_standard,
     },
 }
 

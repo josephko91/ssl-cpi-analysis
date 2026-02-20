@@ -68,6 +68,14 @@ campaigns:
       ESCAPE Learjet state measurements (NASA ICARTT-like .ict files).
       Si is computed from dew point and ambient temperature with respect to ice.
 
+  ICE-L:
+    path: /home/jko/ssl-cpi-analysis/data/env/ICE-L
+    pattern: "*.PNI.nc"
+    description: >
+      ICE-L RAF/Nimbus netCDF flight files.
+      Uses ATX (temperature), PSXC (pressure), and RHUM (pre-calculated RH).
+      Si is derived from RHUM as Si = RHUM/100 - 1.
+
 # Output settings
 output:
   default_format: parquet
