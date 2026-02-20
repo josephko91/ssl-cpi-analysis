@@ -72,14 +72,23 @@ MACPEX_MISSING_FLAGS: list = [
 
 #: Instrument folder → time-column name mapping.
 #: Built from a survey of MACPEX ICT headers; add entries as needed.
+#: Folder names may vary between data mirror sites (e.g. "DLH" vs "DLH-H2O"),
+#: so we list all known variants.  The parser also falls back to any column
+#: containing 'time' or 'utc' if the explicit lookup misses.
 MACPEX_TIME_COLS: Dict[str, str] = {
-    "DLH-H2O":        "Time_Start",
+    # --- canonical short folder names (as on ESPO archive) ---
+    "DLH":            "Time_Start",
     "HWV":            "Time_Start",
     "JLH":            "Time_Start",
+    "MMS-Met":        "Time_Start",
+    "CIMS":           "Time_Start",
+    "CLH":            "Time_Start",
+    "ULH":            "Time_Start",
+    # --- long folder-name variants (some mirrors use these) ---
+    "DLH-H2O":        "Time_Start",
     "MMS-MetData":    "Time_Start",
     "CIMS-H2O":       "Time_Start",
     "CLH-Enhanced":   "Time_Start",
-    "ULH":            "Time_Start",
 }
 _TIME_FALLBACKS = ["Time_Start", "Time_Mid", "Time_Stop", "time_utc", "Time_UTC"]
 
@@ -88,19 +97,21 @@ MMS_T_SCALE = 0.01   # raw integer × 0.01 → Kelvin
 MMS_P_SCALE = 0.10   # raw integer × 0.10 → hPa
 
 #: Preferred water-vapor source column names after instrument-prefix renaming.
-#: These names match what the notebook produces when each instrument's data
-#: columns are prefixed with the instrument folder name.
+#: These names must cover both short and long folder-name variants (the prefix
+#: applied during parsing equals the instrument sub-folder name).
 WV_SOURCE_COLS: Dict[str, List[str]] = {
     "DLH": [
-        "DLH-H2O_H2O_ppmv",      # canonical post-merge name
+        "DLH_H2O_ppmv",           # short folder name  (DLH/)
+        "DLH-H2O_H2O_ppmv",       # long folder name   (DLH-H2O/)
         "H2O_ppmv",               # fallback (un-prefixed)
     ],
     "HWV": [
-        "HWV_H2O",                # canonical post-merge name
+        "HWV_H2O",                # same for both variants
         "H2O",                    # fallback
     ],
     "JLH": [
-        "JLH_H2O(v)_ppmv",       # canonical post-merge name
+        "JLH_H2O(v)_ppmv",       # same for both variants
+        "JLH-H2O_H2O(v)_ppmv",   # possible long variant
         "H2O(v)_ppmv",            # fallback
     ],
 }
@@ -319,14 +330,17 @@ def _find_col(df: pd.DataFrame, candidates: List[str]) -> Optional[str]:
 
 def _find_mms_col(df: pd.DataFrame, suffix: str) -> Optional[str]:
     """
-    Find a MMS-MetData column by its known suffix.
+    Find a MMS column by its known suffix.
 
-    Tries the canonical ``MMS-MetData_{suffix}`` first, then any column whose
-    name ends with ``_{suffix}`` and contains ``MMS``.
+    Tries short (``MMS-Met_{suffix}``) and long (``MMS-MetData_{suffix}``)
+    canonical names first, then any column whose name ends with
+    ``_{suffix}`` and contains ``MMS``.
     """
-    canonical = f"MMS-MetData_{suffix}"
-    if canonical in df.columns:
-        return canonical
+    # Try known canonical names (short folder, long folder)
+    for prefix in ("MMS-Met", "MMS-MetData"):
+        canonical = f"{prefix}_{suffix}"
+        if canonical in df.columns:
+            return canonical
     # Broader search
     return next(
         (c for c in df.columns
@@ -599,15 +613,18 @@ def extract_macpex_standard(df: pd.DataFrame) -> pd.DataFrame:
     """
     # Position columns may be prefixed with the MMS instrument name
     lat_col = _find_col(
-        df, ["MMS-MetData_LAT", "MMS-MetData_Lat", "LAT", "Lat", "latitude"]
+        df, ["MMS-Met_LAT", "MMS-Met_Lat",
+             "MMS-MetData_LAT", "MMS-MetData_Lat", "LAT", "Lat", "latitude"]
     ) or next((c for c in df.columns if "lat" in c.lower()), None)
 
     lon_col = _find_col(
-        df, ["MMS-MetData_LON", "MMS-MetData_Lon", "LON", "Lon", "longitude"]
+        df, ["MMS-Met_LON", "MMS-Met_Lon",
+             "MMS-MetData_LON", "MMS-MetData_Lon", "LON", "Lon", "longitude"]
     ) or next((c for c in df.columns if "lon" in c.lower()), None)
 
     alt_col = _find_col(
-        df, ["MMS-MetData_ALT", "MMS-MetData_Alt", "ALT", "Alt", "ALTITUDE"]
+        df, ["MMS-Met_ALT", "MMS-Met_Alt",
+             "MMS-MetData_ALT", "MMS-MetData_Alt", "ALT", "Alt", "ALTITUDE"]
     ) or next((c for c in df.columns if "alt" in c.lower()), None)
 
     # Consolidate source_file columns (one per instrument after merging)

@@ -154,7 +154,7 @@ def _parse_ict_file(filepath: Path) -> pd.DataFrame:
 
 def _combine_ict_files(
     file_list: list[Path],
-    time_tolerance: str = "1S",
+    time_tolerance: str = "1s",
 ) -> pd.DataFrame:
     """Load and merge all POSIDON ICT files across instruments.
 
@@ -213,7 +213,7 @@ def _combine_ict_files(
 def load_posidon(
     data_dir: Union[str, Path],
     pattern: str = "*.ict",
-    time_tolerance: str = "1S",
+    time_tolerance: str = "1s",
 ) -> pd.DataFrame:
     """Load all POSIDON ICT files from *data_dir* and return a merged DataFrame.
 
