@@ -61,6 +61,13 @@ campaigns:
       ATTREX (Airborne Tropical TRopopause EXperiment).
       NASA ICARTT (.ict) files from Global Hawk.
 
+  ESCAPE:
+    path: /home/jko/ssl-cpi-analysis/data/env/ESCAPE/learjet-state-measurements/jk4731582465
+    pattern: "ESCAPE-Page0_Learjet_*.ict"
+    description: >
+      ESCAPE Learjet state measurements (NASA ICARTT-like .ict files).
+      Si is computed from dew point and ambient temperature with respect to ice.
+
 # Output settings
 output:
   default_format: parquet
