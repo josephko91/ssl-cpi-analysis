@@ -25,6 +25,7 @@ from .airs_ii import load_airs_ii
 from .attrex import load_attrex
 from .escape import load_escape
 from .ice_l import load_ice_l
+from .iphex import load_iphex
 
 # Campaign registry for easy iteration
 CAMPAIGN_LOADERS = {
@@ -36,6 +37,7 @@ CAMPAIGN_LOADERS = {
     "OLYMPEX": load_olympex,
     "AIRS-II": load_airs_ii,
     "ATTREX": load_attrex,
+    "IPHEX": load_iphex,
     "ESCAPE": load_escape,
     "ICE-L": load_ice_l,
 }
@@ -58,6 +60,7 @@ __all__ = [
     "load_olympex",
     "load_airs_ii",
     "load_attrex",
+    "load_iphex",
     "load_escape",
     "load_ice_l",
     "CAMPAIGN_LOADERS",

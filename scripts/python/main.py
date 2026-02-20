@@ -31,6 +31,7 @@ from parsers.midcix import extract_midcix_standard
 from parsers.olympex import extract_olympex_standard
 from parsers.airs_ii import extract_airs_ii_standard
 from parsers.attrex import extract_attrex_standard
+from parsers.iphex import extract_iphex_standard
 from parsers.escape import extract_escape_standard
 from parsers.ice_l import extract_ice_l_standard
 
@@ -88,6 +89,12 @@ DEFAULT_CAMPAIGN_CONFIG: Dict[str, Dict] = {
         "pattern": "*.ict",
         "loader": "load_attrex",
         "extractor": extract_attrex_standard,
+    },
+    "IPHEX": {
+        "path": "/home/jko/ssl-cpi-analysis/data/env/IPHEX",
+        "pattern": "*.ict",
+        "loader": "load_iphex",
+        "extractor": extract_iphex_standard,
     },
     "ESCAPE": {
         "path": "/home/jko/ssl-cpi-analysis/data/env/ESCAPE/learjet-state-measurements/jk4731582465",

@@ -61,6 +61,15 @@ campaigns:
       ATTREX (Airborne Tropical TRopopause EXperiment).
       NASA ICARTT (.ict) files from Global Hawk.
 
+  IPHEX:
+    path: /home/jko/ssl-cpi-analysis/data/env/IPHEX
+    pattern: "*.ict"
+    description: >
+      IPHEX (Integrated Precipitation and Hydrology Experiment).
+      Uses chilled-mirror FrostPoint with Air_Temp and STATIC_PR state variables.
+      Si is computed as supersaturation with respect to ice from FrostPoint vs Air_Temp,
+      with invalid value masking and physical-limit filters.
+
   ESCAPE:
     path: /home/jko/ssl-cpi-analysis/data/env/ESCAPE/learjet-state-measurements/jk4731582465
     pattern: "ESCAPE-Page0_Learjet_*.ict"
