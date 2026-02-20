@@ -63,7 +63,7 @@ campaigns:
 
   IPHEX:
     path: /home/jko/ssl-cpi-analysis/data/env/IPHEX
-    pattern: "*.ict"
+    pattern: "*.iphex"
     description: >
       IPHEX (Integrated Precipitation and Hydrology Experiment).
       Uses chilled-mirror FrostPoint with Air_Temp and STATIC_PR state variables.

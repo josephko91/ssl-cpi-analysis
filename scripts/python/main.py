@@ -92,7 +92,7 @@ DEFAULT_CAMPAIGN_CONFIG: Dict[str, Dict] = {
     },
     "IPHEX": {
         "path": "/home/jko/ssl-cpi-analysis/data/env/IPHEX",
-        "pattern": "*.ict",
+        "pattern": "*.iphex",
         "loader": "load_iphex",
         "extractor": extract_iphex_standard,
     },
