@@ -38,7 +38,7 @@ ICE_L_FILE_RE = re.compile(
 
 def _to_float_1d(values) -> np.ndarray:
     arr = np.asarray(values).reshape(-1)
-    return pd.to_numeric(arr, errors="coerce").to_numpy(dtype=float)
+    return pd.to_numeric(pd.Series(arr), errors="coerce").to_numpy(dtype=float)
 
 
 def _match_length(arr: np.ndarray, target_len: int) -> np.ndarray:
